@@ -1,0 +1,3525 @@
+https://github.com/docker/distribution.
+
+
+
+docker run dockerinaction/hello_world
+echo "hello world"
+
+cmd
+docker help
+docker help cp
+
+Run
+docker run --detach \                    //Start Program On background    //Or -d.
+--name web nginx:latest
+
+docker run -d \
+--name mailer \
+
+docker run --interactive --tty \
+--link web:web \
+--name web_test \
+busybox:latest /bin/sh
+
+wget -O - http://web:80/
+
+docker run -it \
+--name agent \
+--link web:insideweb \
+--link mailer:insidemailer \
+dockerinaction/ch2_agent
+
+docker ps
+
+docker restart web
+docker restart mailer
+docker restart agent
+
+docker logs web
+
+"GET / HTTP/1.0" 200
+
+docker logs mailer
+docker logs agent
+
+docker stop web
+docker logs mailer
+
+
+docker run -d --name namespaceA \
+busybox:latest /bin/sh -c "sleep 30000"
+docker run -d --name namespaceB \
+busybox:latest /bin/sh -c "nc -l -p 0.0.0.0:80"
+docker exec namespaceA ps
+docker exec namespaceB ps
+
+docker exec command
+
+Command b above should generate a process list similar to the following:
+PID USER COMMAND
+1 root /bin/sh -c sleep 30000
+5 root sleep 30000
+6 root ps
+Command c above should generate a slightly different process list:
+PID USER COMMAND
+1 root /bin/sh -c nc -l -p 0.0.0.0:80
+7 root nc -l -p 0.0.0.0:80
+8 root ps
+
+docker run --pid host busybox:latest ps
+
+
+docker rename webid webid-old                        // rename
+docker run -d --name webid nginx                     // create new
+
+hex-encoded 1024-bit
+7cb5d2b9a7eab87f07182b5bf58936c9947890995b1b94f412912fa822a9ecb5
+
+*
+docker exec \
+7cb5d2b9a7eab87f07182b5bf58936c9947890995b1b94f412912fa822a9ecb5 \
+ps
+docker stop \
+7cb5d2b9a7eab87f07182b5bf58936c9947890995b1b94f412912fa822a9ecb5
+
+*
+docker exec 7cb5d2b9a7ea ps
+docker stop 7cb5d2b9a7ea
+
+*
+docker create nginx
+b26a631e536d3caae348e9fd36e7661254a11511eb2274fb55f9f7c788721b0d
+
+*
+CID=$(docker create nginx:latest)
+echo $CID
+
+*
+docker create --cidfile /tmp/web.cid nginx                        //Create a new stopped container
+cat /tmp/web.cid
+
+*
+CID=$(docker ps --latest --quiet)
+echo $CID
+CID=$(docker ps -l –q)
+echo $CID
+
+*
+Container State and dependencies
+MAILER_CID=$(docker run -d dockerinaction/ch2_mailer)
+WEB_CID=$(docker create nginx)
+AGENT_CID=$(docker create --link $WEB_CID:insideweb \
+--link $MAILER_CID:insidemailer \
+dockerinaction/ch2_agent)
+
+*
+docker ps -a
+
+* 
+docker start $WEB_CID                        //run web first
+docker start $AGENT_CID
+
+*
+MAILER_CID=$(docker run -d dockerinaction/ch2_mailer)
+WEB_CID=$(docker run -d nginx)
+AGENT_CID=$(docker run -d \
+--link $WEB_CID:insideweb \
+--link $MAILER_CID:insidemailer \
+dockerinaction/ch2_agent)
+
+read-only
+*
+docker run -d --name wp --read-only wordpress:4
+
+*
+docker inspect --format "{{.State.Running}}" wp
+
+*
+docker logs wp
+
+*
+docker run -d --name wpdb \
+-e MYSQL_ROOT_PASSWORD=ch2demo \
+mysql:5
+
+*
+docker run -d --name wp2 \
+--link wpdb:mysql \
+-p 80 --read-only \
+wordpress:4
+
+*
+Check one more time that WordPress is running correctly:
+docker inspect --format "{{.State.Running}}" wp2
+
+*
+docker logs wp2
+
+*
+# Start the container with specific volumes for read only exceptions
+docker run -d --name wp3 --link wpdb:mysql -p 80 \
+-v /run/lock/apache2/ \
+-v /run/apache2/ \
+--read-only wordpress:4
+
+*
+An updated version of the script you’ve been working on should look like this:
+SQL_CID=$(docker create -e MYSQL_ROOT_PASSWORD=ch2demo mysql:5)
+docker start $SQL_CID
+MAILER_CID=$(docker create dockerinaction/ch2_mailer)
+docker start $MAILER_CID
+WP_CID=$(docker create --link $SQL_CID:mysql -p 80 \
+-v /run/lock/apache2/ -v /run/apache2/ \
+--read-only wordpress:4)
+docker start $WP_CID
+AGENT_CID=$(docker create --link $WP_CID:insideweb \
+--link $MAILER_CID:insidemailer \
+dockerinaction/ch2_agent)
+docker start $AGENT_CID
+
+*
+docker run --env MY_ENVIRONMENT_VAR="this is a test" \
+busybox:latest \
+env
+
+*
+ WORDPRESS_DB_HOST
+ WORDPRESS_DB_USER
+ WORDPRESS_DB_PASSWORD
+ WORDPRESS_DB_NAME
+ WORDPRESS_AUTH_KEY
+ WORDPRESS_SECURE_AUTH_KEY
+ WORDPRESS_LOGGED_IN_KEY
+ WORDPRESS_NONCE_KEY
+ WORDPRESS_AUTH_SALT
+ WORDPRESS_SECURE_AUTH_SALT
+ WORDPRESS_LOGGED_IN_SALT
+ WORDPRESS_NONCE_SALT
+
+*
+docker create --env WORDPRESS_DB_HOST=<my database hostname> wordpress:4
+
+* Password WorkPress
+docker create \
+--env WORDPRESS_DB_HOST=<my database hostname> \
+--env WORDPRESS_DB_USER=site_admin \
+--env WORDPRESS_DB_PASSWORD=MeowMix42 \
+wordpress:4
+
+*
+docker create --link wpdb:mysql \
+-e WORDPRESS_DB_NAME=client_a_wp wordpress:4                  // Client A
+
+docker create --link wpdb:mysql \
+-e WORDPRESS_DB_NAME=client_b_wp wordpress:4                  // Client B
+
+* Password MYSQL
+DB_CID=$(docker run -d -e MYSQL_ROOT_PASSWORD=ch2demo mysql:5)
+MAILER_CID=$(docker run -d dockerinaction/ch2_mailer)
+
+*
+if [ ! -n "$CLIENT_ID" ]; then
+echo "Client ID not set”
+exit 1
+fi
+WP_CID=$(docker create \
+--link $DB_CID:mysql \
+--name wp_$CLIENT_ID \
+-p 80 \
+-v /run/lock/apache2/ -v /run/apache2/ \
+-e WORDPRESS_DB_NAME=$CLIENT_ID \
+--read-only wordpress:4)
+docker start $WP_CID
+AGENT_CID=$(docker create \
+--name agent_$CLIENT_ID \
+--link $WP_CID:insideweb \
+--link $MAILER_CID:insidemailer \
+dockerinaction/ch2_agent)
+
+docker start $AGENT_CID
+
+*
+MAILER_CID > agent_$CLIENT_ID > wp_$CLIENT_ID > DB_CID
+
+*
+Building durable containers
+
+*
+docker run -d --name backoff-detector --restart always busybox date
+
+*
+docker logs -f backoff-detector
+
+*
+docker exec backoff-detector echo Just a Test
+
+* LAMP LINUX Apache MySQL PHP
+docker run -d -p 80:80 --name lamp-test tutum/lamp
+
+*
+docker top lamp-test
+
+*
+docker exec lamp-test ps
+
+*
+PID TTY 	TIME CMD
+1 ? 		00:00:00 supervisord
+433 ? 		00:00:00 mysqld_safe
+835 ? 		00:00:00 apache2
+842 ? 		00:00:00 ps
+
+*
+docker exec lamp-test kill <PID>
+
+*  //error command COZ > run something called an entrypoint before executing
+docker run wordpress:4 cat /entrypoint.sh
+
+error: missing WORDPRESS_DB_HOST and MYSQL_PORT_3306_TCP environment
+variables
+
+*
+docker run --entrypoint="cat" \
+wordpress:4 /entrypoint.sh
+
+Use "cat" as the entrypoint
+
+Pass /entrypoint.sh as
+the argument to cat
+
+* Cleaning up
+docker ps -a
+
+* Delete
+docker rm wp
+
+*removed as soon as it
+docker run --rm --name auto-exit-test busybox:latest echo Hello World
+docker ps -a
+
+*
+docker rm -vf $(docker ps -a -q)
+
+* Registry host / User name / Short name
+quay.io/dockerinaction/ch3_hello_registry
+
+----------------------------------------------------------------------
+* Install Data Base postgres
+docker search postgres
+
+-----------------------------------------------------------------------
+* Pull and create a container from the latest image in the mystery repository to reveal the password.
+*
+docker run -it --rm ????
+
+*  The password should be provided to the scavenger hunt program.
+docker run -it --rm dockerinaction/ch3_ex2_hunt
+
+*
+docker rmi dockerinaction/ch3_ex2_hunt
+docker rmi <mystery repository>
+----------------------------------------------------------
+
+Hello World” type example from an alternative registry
+* registor images
+docker pull quay.io/dockerinaction/ch3_hello_registry:latest
+
+* remove images
+docker rmi quay.io/dockerinaction/ch3_hello_registry
+
+*
+docker pull busybox:latest
+docker save -o myfile.tar busybox:latest
+
+*
+docker rmi busybox
+
+*
+docker load –i myfile.tar
+
+------------------------------------------------
+* Git install
+git clone https://github.com/dockerinaction/ch3_dockerfile.git
+docker build -t dia_ch3/dockerfile:latest ch3_dockerfile
+
+*
+docker rmi dia_ch3/dockerfile
+rm -rf ch3_dockerfile
+
+*
+docker pull dockerinaction/ch3_myapp
+docker pull dockerinaction/ch3_myotherapp
+
+
+* clean all
+docker rmi \
+dockerinaction/ch3_myapp \
+dockerinaction/ch3_myotherapp \
+java:6
+
+-----------------------------------------------------------------------------
+Persistent storage and shared state with volumes
+
+*
+docker run -d \
+--volume /var/lib/cassandra/data \
+--name cass-shared \
+alpine echo Data Container
+
+*
+docker run -d \
+--volumes-from cass-shared \
+--name cass1 \
+cassandra:2.2
+
+*
+docker run –it --rm \
+--link cass1:cass \
+cassandra:2.2 cqlsh cass
+
+* Now you can inspect or modify your Cassandra database from the CQLSH command
+line. First, look for a keyspace named docker_hello_world: *
+
+*
+select *
+from system.schema_keyspaces
+where keyspace_name = 'docker_hello_world';
+
+*
+create keyspace docker_hello_world
+with replication = {
+'class' : 'SimpleStrategy',
+'replication_factor': 1
+};
+
+*
+select *
+from system.schema_keyspaces
+where keyspace_name = 'docker_hello_world';
+
+*
+# Leave and stop the current container
+quit
+
+*
+docker stop cass1
+docker rm -vf cass1
+
+*
+docker run -d \
+--volumes-from cass-shared \
+--name cass2 \
+cassandra:2.2
+docker run –it --rm \
+--link cass2:cass \
+cassandra:2.2 \
+cqlsh cass
+select *
+from system.schema_keyspaces
+where keyspace_name = 'docker_hello_world';
+
+*
+quit
+docker rm -vf cass2 cass-shared
+
+
+----------------------------------------------------------------
+Bind mount volume "Directory"
+
+* Map directory with server
+docker run -d --name bmweb \
+-v ~/example-docs:/usr/local/apache2/htdocs \
+-p 80:80 \
+httpd:latest
+
+* Read Only make in directory
+docker rm -vf bmweb
+docker run --name bmweb_ro \
+--volume ~/example-docs:/usr/local/apache2/htdocs/:ro \
+-p 80:80 \
+httpd:latest
+
+* Send test in directory
+docker run --rm \
+-v ~/example-docs:/testspace:ro \
+alpine \
+/bin/sh -c 'echo test > /testspace/test'
+
+* EX
+ls ~/example-docs/absent
+docker run --rm -v ~/example-docs/absent:/absent alpine:latest \
+/bin/sh -c 'mount | grep absent'
+ls ~/example-docs/absent
+
+-----------------------------------------------------------------
+Docker-managed "volumes"
+
+*  Specify volume mount point inside container
+docker run -d \
+-v /var/lib/cassandra/data \
+--name cass-shared \
+alpine echo Data Container
+
+
+*
+docker inspect -f "{{json .Volumes}}" cass-shared
+
+* Output
+{"/var/lib/cassandra/data":"/mnt/sda1/var/lib/docker/vfs/dir/632fa59c..."}
+
+-----------------------------------------------------------------
+Host-dependent sharing
+*Set up a known location Bind mount the location into a log-writing container 
+mkdir ~/web-logs-example
+docker run --name plath -d \
+-v ~/web-logs-example:/data \
+dockerinaction/ch4_writer_a
+
+*Bind mount the same location into a container for reading
+docker run --rm \
+-v ~/web-logs-example:/reader-data \
+alpine:latest \
+head /reader-data/logA
+
+*View the logs from the host
+cat ~/web-logs-example/logA
+
+*Stop the Writer
+docker stop plath
+
+------------------------------------
+sample
+*
+docker run --name woolf -d \
+--volume ~/web-logs-example:/data \
+dockerinaction/ch4_writer_a
+
+docker run --name alcott -d \
+-v ~/web-logs-example:/data \
+dockerinaction/ch4_writer_b
+
+docker run --rm --entrypoint head \
+-v ~/web-logs-example:/towatch:ro \
+alpine:latest \
+/towatch/logA
+
+docker run --rm \
+-v ~/web-logs-example:/toread:ro \
+alpine:latest \
+head /toread/logB
+
+-------------------------------------------------------------
+Generalized sharing and the volumes-from flag
+
+*
+docker run --name fowler \
+-v ~/example-books:/library/PoEAA \
+-v /library/DSL \
+alpine:latest \
+echo "Fowler collection created."
+
+*
+docker run --name knuth \
+-v /library/TAoCP.vol1 \
+-v /library/TAoCP.vol2 \
+-v /library/TAoCP.vol3 \
+-v /library/TAoCP.vol4.a \
+alpine:latest \
+echo "Knuth collection created"
+
+docker run --name reader \
+--volumes-from fowler \
+--volumes-from knuth \
+alpine:latest ls -l /library/
+
+docker inspect --format "{{json .Volumes}}" reader
+
+-------------------------------------------------
+* Create an aggregation
+docker run --name aggregator \
+--volumes-from fowler \
+--volumes-from knuth \
+alpine:latest \
+echo "Collection Created."
+
+* Consume volumes from a single source and list them
+docker run --rm \
+--volumes-from aggregator \
+alpine:latest \
+ls -l /library/
+
+---------------------------------------------------
+* COPY Volume  (Permission Read /write also) You can't change to read if you copy read/ write
+docker run --name chomsky --volume /library/ss \
+alpine:latest echo "Chomsky collection created."
+
+docker run --name lamport --volume /library/ss \
+alpine:latest echo "Lamport collection created."
+
+docker run --name student \
+--volumes-from chomsky --volumes-from lamport \
+alpine:latest ls -l /library/
+
+docker inspect -f "{{json .Volumes}}" student
+
+-------------------------------------------------------
+*
+docker rm -v student
+
+*
+docker rm -v $(docker ps -aq)
+
+--------------------------------------------------
+Data-packed volume containers
+
+*
+docker run --name dpvc \
+-v /config \
+dockerinaction/ch4_packed /bin/sh -c 'cp /packed/* /config/'
+docker run --rm --volumes-from dpvc \
+alpine:latest ls /config
+docker run --rm --volumes-from dpvc \
+alpine:latest cat /config/packedData
+docker rm -v dpvc
+
+Polymorphic container pattern
+*
+docker run --name tools dockerinaction/ch4_tools
+docker run --rm \
+--volumes-from tools \
+alpine:latest \
+ls /operations/*
+
+docker run -d --name important_application \
+--volumes-from tools \
+dockerinaction/ch4_ia
+docker exec important_application /operations/tools/someTool
+docker rm -vf important_application
+docker rm -v tools
+
+*
+docker run --name devConfig \
+-v /config \
+dockerinaction/ch4_packed_config:latest \
+/bin/sh -c 'cp /development/* /config/'
+docker run --name prodConfig \
+-v /config \
+dockerinaction/ch4_packed_config:latest \
+/bin/sh -c 'cp /production/* /config/'
+docker run --name devApp \
+--volumes-from devConfig \
+dockerinaction/ch4_polyapp
+docker run --name prodApp \
+--volumes-from prodConfig \
+dockerinaction/ch4_polyapp
+
+///////////////////////////////////////////////
+Network exposure
+
+private
+*
+docker run --rm \
+--net none \
+alpine:latest \
+ip addr
+
+*
+docker run --rm \
+--net none \
+alpine:latest \
+ping -w 2 8.8.8.8
+
+Bridge
+*
+docker run --rm \
+--net bridge \
+alpine:latest \
+ip addr
+
+*
+docker run --rm \
+alpine:latest \
+ping -w 2 8.8.8.8
+
+Custom name resolution
+*
+docker run --rm \
+--hostname barker \
+alpine:latest \
+nslookup barker
+
+Server: 10.0.2.3
+Address 1: 10.0.2.3
+Name: barker
+Address 1: 172.17.0.22 barker
+
+*
+docker run --rm \
+--dns 8.8.8.8 \
+alpine:latest \
+nslookup docker.com
+
+*
+docker run --rm \
+--dns-search docker.com \
+busybox:latest \
+nslookup registry.hub
+
+Manage Host name
+
+*
+docker run --rm \
+--dns-search dev.mycompany \
+busybox:latest \
+nslookup myservice
+
+docker run --rm \
+--dns-search test.mycompany \
+busybox:latest \
+nslookup myservice
+
+*
+docker run --rm \
+--dns-search mycompany \
+--dns-search myothercompany
+
+*
+docker run --rm \
+--add-host test:10.10.10.255 \
+alpine:latest \
+nslookup test
+
+*
+docker run --rm \
+--hostname mycontainer \
+--add-host docker.com:127.0.0.1 \
+--add-host test:10.10.10.2 \
+alpine:latest \
+cat /etc/hosts
+
+172.17.0.45 mycontainer
+127.0.0.1 localhost
+::1 localhost ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+10.10.10.2 test
+127.0.0.1 docker.com
+
+////////////////////////////////////
+Opening inbound communication
+
+-p=[] or --publish=[]
+
+*
+docker run -p 3333 ...
+
+*
+docker run -p 3333:3333 ...
+
+*
+docker run -p 192.168.0.32::2222 ...
+
+*
+docker run -p 192.168.0.32:1111:1111 ...
+
+*
+docker run -d --name dawson \
+-p 5000 \
+-p 6000 \
+-p 7000 \
+dockerinaction/ch5_expose            +Expose all ports
+
+*
+docker run -d --name woolery \
+-P \
+dockerinaction/ch5_expose
+
+*
+docker run -d --name philbin \
+--expose 8000 \
+-P \
+dockerinaction/ch5_expose
+
+*
+docker run -d --name philbin \
+--expose 8000 \                       +Expose another port    
+-P \                                  +Publish all ports
+dockerinaction/ch5_expose             
+ 
+*
+docker port philbin
+
+*
+5000/tcp -> 0.0.0.0:49164
+6000/tcp -> 0.0.0.0:49165
+7000/tcp -> 0.0.0.0:49166
+8000/tcp -> 0.0.0.0:49163
+
+///////////////////////////////////
+Inter-container communication
+
+*
+docker run -it --rm dockerinaction/ch5_nmap -sS -p 3333 172.17.0.0/24
+
+---------------------------
+disallow network connections
+between containers.
+
+*
+docker -d --icc=false ...
+
+
++--------------------------
+Modifying the bridge interface
+--bip 192.168.0.128/25
+
+*
+docker -d --bip "192.168.0.128" ...
+
+64 address
+*
+docker -d --fixed-cidr "192.168.0.192/26"
+
+*
+docker -d –mtu 1200
+
+-------------------------------------
+If you’ve configured a bridge named mybridge,
+
+*
+docker -d -b mybridge ...
+docker -d --bridge mybridge ...
+
+
+///////////////////////////////////////////
+Joined containers
+
+*
+docker run -d --name brady \
+--net none alpine:latest \
+nc -l 127.0.0.1:3333
+
+*
+docker run -it \
+--net container:brady \
+alpine:latest netstat –al
+
+----------------------------------------------
+Open containers
+
+*
+docker run --rm \
+--net host \
+alpine:latest ip addr
+
+*
+docker run -d --name importantData \              +Named targetof a link
+--expose 3306 \ 
+dockerinaction/mysql_noauth \
+service mysql_noauth start
+
+*
+docker run -d --name importantWebapp \
+--link imporantData:db \                            + Create link and set alias to db           
+dockerinaction/ch5_web startapp.sh -db tcp://db:3306
+
+*
+docker run -d --name buggyProgram \
+dockerinaction/ch5_buggy                           + This container has no route to importantData.
+
+
+-----------------------------------------
+Link aliases
+
+*
+docker run --link a:alias-a --link b:alias-b --link c:alias-c ...
+
+*
+following script is included in dockerinaction/ch5_ff
+
+#!/bin/sh
+if [ -z ${DATABASE_PORT+x} ]
+then
+echo "Link alias 'database' was not set!"
+exit
+else
+
+-------------------------------------
+*
+docker run -d --name mydb --expose 3306 \         +Create valid link target
+alpine:latest nc -l 0.0.0.0:3306
+
+*
+docker run -it --rm \                             +Test without link
+dockerinaction/ch5_ff echo This "shouldn't" work.
+
+*
+docker run -it --rm \
+--link mydb:wrongalias \                          +Test with incorrect link alias
+dockerinaction/ch5_ff echo Wrong.
+
+*
+docker run -it --rm \     
+--link mydb:database \                            + Test correct alias
+dockerinaction/ch5_ff echo It worked.
+
+*
+docker stop mydb && docker rm mydb                +Shut down link target container
+
+//////////////////////////////////////////////////
+Environment modifications
+
+*
+docker run -d --name mydb \
+--expose 2222 --expose 3333 --expose 4444/udp \   +Create valid link target
+alpine:latest nc -l 0.0.0.0:2222
+
+*
+docker run -it --rm \
+--link mydb:database \                            +Create link and list environment variables
+dockerinaction/ch5_ff env
+
+*
+docker stop mydb && docker rm mydb
+
+DATABASE_PORT=tcp://172.17.0.23:3333
+DATABASE_PORT_3333_TCP=tcp://172.17.0.23:3333
+DATABASE_PORT_2222_TCP=tcp://172.17.0.23:2222
+DATABASE_PORT_4444_UDP=udp://172.17.0.23:4444
+DATABASE_PORT_2222_TCP_PORT=2222
+DATABASE_PORT_3333_TCP_PORT=3333
+DATABASE_PORT_4444_UDP_PORT=4444
+DATABASE_PORT_3333_TCP_ADDR=172.17.0.23
+DATABASE_PORT_2222_TCP_ADDR=172.17.0.23
+DATABASE_PORT_4444_UDP_ADDR=172.17.0.23
+DATABASE_PORT_2222_TCP_PROTO=tcp
+DATABASE_PORT_3333_TCP_PROTO=tcp
+DATABASE_PORT_4444_UDP_PROTO=udp
+DATABASE_NAME=/furious_lalande/database
+
+//////////////////////////////////////////////////////////////////
+Limiting risk with isolation
+
+*
+docker run -d --name ch6_mariadb \
+--memory 256m \                          + Set a memory constraint
+--cpu-shares 1024
+--user nobody \
+--cap-drop all \
+dockerfile/mariadb
+
+*
+docker run -d -P --name ch6_wordpress \
+--memory 512m \
+--cpu-shares 512 \                       + Set a relative process weight
+--user nobody \
+--cap-drop net_raw \
+--link ch6_mariadb \
+wordpress:4.1
+
+*
+# Start a container limited to a single CPU and run a load generator
+docker run -d \
+--cpuset-cpus 0 \                                        + Restrict to CPU number 0
+--name ch6_stresser dockerinaction/ch6_stresser             
+# Start a container to watch the load on the CPU under load
+docker run -it --rm dockerinaction/ch6_htop
+
+*
+docker rm -vf ch6_stresser
+
+-----------------------------------
+Mount video0
+
+*
+docker -it --rm \
+--device /dev/video0:/dev/video0 \          + Mount video0
+ubuntu:latest ls -al /dev
+
+-------------------------------------------------
+Sharing IPC primitives between containers
+
+*
+docker -d -u nobody --name ch6_ipc_producer \
+dockerinaction/ch6_ipc -producer                  +Start producer
+
+docker -d -u nobody --name ch6_ipc_consumer \     +Start consumer
+dockerinaction/ch6_ipc -consumer
+
+*
+docker logs ch6_ipc_producer
+docker logs ch6_ipc_consumer
+
+*
+docker rm -v ch6_ipc_consumer                  +Remove original consumer
+
+docker -d --name ch6_ipc_consumer \            +Start new consumer
+--ipc container:ch6_ipc_producer \             +Join IPC namespace
+dockerinaction/ch6_ipc -consumer
+
+---------------------------------------------
+*
+docker logs ch6_ipc_producer
+docker logs ch6_ipc_consumer
+
+*
+Remember to clean up your running containers before moving on:
+The v option will clean up volumes.
+The f option will kill the container if it is running.
+The rm command takes a list of containers.
+docker rm -vf ch6_ipc_producer ch6_ipc_consumer
+
+////////////////////////////////////////////
+Using an open memory container
+
+*
+docker -d --name ch6_ipc_producer \         + Start a producer
+--ipc host \                                + Use open memory container
+dockerinaction/ch6_ipc –producer
+
+docker -d --name ch6_ipc_consumer \         + Start a producer
+--ipc host \                                + Use open memory container
+dockerinaction/ch6_ipc -consumer
+
+*
+docker rm -vf ch6_ipc_producer ch6_ipc_consumer
+
+//////////////////////////////////////////////
+Working with the run-as user
+
+*
+docker create --name bob busybox:latest ping localhost
+docker inspect bob                              +Display all of bob’s metadata
+docker inspect --format "{{.Config.User}}" bob  + Show only run-as user defined by bob’s image
+
+*
+docker run --rm --entrypoint "" busybox:latest whoami
+
+*
+docker run --rm --entrypoint "" busybox:latest id          +Outputs: uid=0(root) gid=0(root) groups=10(wheel)
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Set Password Separate File and permission
+
+*
+docker run --rm busybox:latest awk -F: '$0=$1' /etc/passwd
+
+*
+docker run --rm \
+--user nobody \                         +Set run-as user to nobody
+busybox:latest id                       +Outputs: uid=99(nobody) gid=99(nobody)
+
+*
+docker run --rm \
+-u nobody:default \                     +Outputs: uid=99(nobody) gid=1000(default)
+busybox:latest id
+
+*
+docker run --rm \
+-u 10000:20000 \                        +Set UID and GID
+busybox:latest id                       +Outputs: uid=10000 gid=20000
+
+*
+docker run -it --name escalation -u nobody busybox:latest \
+/bin/sh -c "whoami; su -c whoami"                            +Outputs: “nobody” and then “root”
+
+***********************************************************************
+Users and volumes
+
+*
+echo "e=mc^2" > garbage                 +Create new file on your host
+
+chmod 600 garbage                       +Make file readable only
+by its owner
+
+sudo chown root:root garbage            +Make file owned by root (assuming you have sudo access)
+
+docker run --rm -v "$(pwd)"/garbage:/test/garbage \
+-u nobody \
+ubuntu:latest cat /test/garbage          +Try to read file as nobody
+
+*
+docker run --rm -v "$(pwd)"/garbage:/test/garbage \
+-u root ubuntu:latest cat /test/garbage   +Try to read file as "container root"
+# Outputs: "e=mc^2"
+
+# cleanup that garbage
+sudo rm -f garbage
+
+////////////////////////////////////////////////////////////////
+Limiting risk with isolation
+
+*
+mkdir logFiles
+
+sudo chown 2000:2000 logFiles            +++++++++++Set ownership of directory to desired user and group+++++++++++++++++++
+
+docker run --rm -v "$(pwd)"/logFiles:/logFiles \   + Write important log file
+-u 2000:2000 ubuntu:latest \                       + Set UID:GID to 2000:2000
+/bin/bash -c "echo This is important info > /logFiles/important.log"
+
+docker run --rm -v "$(pwd)"/logFiles:/logFiles \   + Append to log from another container
+-u 2000:2000 ubuntu:latest \                       + Also set UID:GID to 2000:2000
+/bin/bash -c "echo More info >> /logFiles/important.log"
+
+sudo rm –r logFiles
+
+
+///////////////////////////////////////////////////////////////
+Adjusting OS feature access with capabilities
+
+SETPCAP—Modify process capabilities
+ SYS_MODULE—Insert/remove kernel modules
+ SYS_RAWIO—Modify kernel memory
+ SYS_PACCT—Configure process accounting
+ SYS_NICE—Modify priority of processes
+ SYS_RESOURCE—Override resource limits
+ SYS_TIME—Modify the system clock
+ SYS_TTY_CONFIG—Configure TTY devices
+ AUDIT_WRITE—Write the audit log
+ AUDIT_CONTROL—Configure audit subsystem
+ MAC_OVERRIDE—Ignore kernel MAC policy
+ MAC_ADMIN—Configure MAC configuration
+ SYSLOG—Modify kernel print behavior
+ NET_ADMIN—Configure the network
+ SYS_ADMIN—Catchall for administrative functions
+
+*
+docker run --rm -u nobody \
+ubuntu:latest \
+/bin/bash -c "capsh --print | grep net_raw"
+docker run --rm -u nobody \
+--cap-drop net_raw \                                 +Drop NET_RAW capability
+ubuntu:latest \
+/bin/bash -c "capsh --print | grep net_raw"
+
+
+*
+docker run --rm -u nobody \
+ubuntu:latest \
+/bin/bash –c "capsh --print | grep sys_admin"        +SYS_ADMIN is not included
+
+docker run --rm -u nobody \
+--cap-add sys_admin \                                +Add SYS_ADMIN
+ubuntu:latest \
+/bin/bash –c "capsh --print | grep sys_admin"
+
+////////////////////////////////////////////////////////////////////
+Running a container with full privileges
+
+*
+docker run --rm \
+--privileged \
+ubuntu:latest id                         +Check out our IDs
+
+docker run --rm \
+--privileged \
+ubuntu:latest capsh –print               +Check out our Linux capabilities
+
+docker run --rm \
+--privileged \
+ubuntu:latest ls /dev                    +Check out list of mounted devices
+
+docker run --rm \
+--privileged \
+ubuntu:latest ifconfig                   +Examine network configuration
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////
+Specifying additional security options
+Linux Security Modules (LSM)
+
+*
+label:user:<USERNAME> where <USERNAME>
+label:role:<ROLE> where <ROLE>
+label:type:<TYPE> where <TYPE>
+label:level:<LEVEL> where <LEVEL>
+
+label:disable.
+
+* AppArmor profile
+label:apparmor:<PROFILE> where <PROFILE>
+
+----------------------------------------------
+Fine-tuning with LXC
+Linux Containers (LXC)
+
+*
+docker run -d \
+--lxc-conf="lxc.cgroup.cpuset.cpus=0,1" \                    + Limited to two CPU cores by LXC
+--name ch6_stresser dockerinaction/ch6_stresser
+
+docker run -it --rm dockerinaction/ch6_htop
+
+docker rm -vf ch6_stresser
+
+* finished
+htop, press Q to quit.
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+Packaging Software for Distribution
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                Building Docker images from a container
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Packaging Hello World
+
+*
+docker run --name hw_container \
+ubuntu:latest \
+touch /HelloWorld                                + Modify filein container
+
+docker commit hw_container hw_image              + Commit change to new image
+
+docker rm -vf hw_container                       + Remove changed container
+
+docker run --rm \
+hw_image \
+ls -l /HelloWorld                                + Examine file in new container
+
+----------------------------------------------------------------------------------
+Preparing packaging for Git
+
+*
+docker run -it --name image-dev ubuntu:latest /bin/bash
+
+*
+apt-get –y install git
+
+*
+git version
+# Output something like:
+# git version 1.9.1
+
+
+-----------------------------------------------------------------------------------
+Reviewing file system changes
+
+*
+docker diff image-dev                      + Outputs a LONG list of file changes
+
+/////////////////////////////
+*
+docker run --name tweak-a busybox:latest touch /HelloWorld           + Add new file to busybox
+docker diff tweak-a
+# Output:
+# A /HelloWorld                                  
+
+docker run --name tweak-d busybox:latest rm /bin/vi                   + Remove existing file from busybox
+docker diff tweak-d
+# Output:
+# C /bin
+# D /bin/vi
+
+docker run --name tweak-c busybox:latest touch /bin/vi                + Change existing file in busybox
+docker diff tweak-c
+# Output:
+# C /bin
+# C /bin/busybox
+
+Always remember to clean up your workspace, like this:
+docker rm -vf tweak-a
+docker rm -vf tweak-d
+docker rm -vf tweak-c
+
+Now that you’ve seen the changes you’ve made to the file system, you’re ready to commit
+the changes to a new image. As with most other things, this involves a single
+command that does several things.
+
+------------------------------------------------------------------------------------------------
+Committing a new image
+
+*
+docker commit -a "@dockerinaction" -m "Added git" image-dev ubuntu-git
+# Outputs a new unique image identifier like:
+# bbf1d5d430cdf541a72ad74dfa54f6faec41d2c1e4200778e9d4302035e5d143
+
+*
+REPOSITORY TAG IMAGE ID CREATED VIRTUAL SIZE
+ubuntu-git latest bbf1d5d430cd 5 seconds ago 226 MB
+
+*
+docker run --rm ubuntu-git git version
+
+*
+docker run --rm ubuntu-git
+
+-------------entrypoint-------------
+
+*
+docker run --name cmd-git --entrypoint git ubuntu-git      + Show standard git help and exit
+
+docker commit -m "Set CMD git" \
+-a "@dockerinaction" cmd-git ubuntu-git                    + Commit new image to same name
+
+docker rm -vf cmd-git                                      + Cleanup
+
+docker run --name cmd-git ubuntu-git version
+
+
+--------------------------------------------------------
+               Configurable image attributes
+--------------------------------------------------------
+
+*
+docker run --name rich-image-example \
+-e ENV_EXAMPLE1=Rich -e ENV_EXAMPLE2=Example \                + Create environment variable specialization
+busybox:latest
+
+docker commit rich-image-example rie                          + Commit image
+
+docker run --rm rie \
+/bin/sh -c "echo \$ENV_EXAMPLE1 \$ENV_EXAMPLE2"               + Outputs: Rich Example
+
+Next, consider a container that introduces an entrypoint and command specialization
+as a new layer on top of the previous example:
+
+docker run --name rich-image-example-2 \
+--entrypoint "/bin/sh" \                                      + Set default entrypoint
+rie \
+-c "echo \$ENV_EXAMPLE1 \$ENV_EXAMPLE2"                       + Set default command
+
+docker commit rich-image-example-2 rie                        + Commit image
+
+docker run --rm rie                                           + Different command with same output
+ 
+---------------------------------------------------------------
+An exploration of union file systems
+
+*
+docker run --name mod_ubuntu ubuntu:latest touch /mychange
+
+*
+docker diff mod_ubuntu
+
+* Output
+A /mychange
+
+*
+docker run --name mod_busybox_delete busybox:latest rm /etc/profile
+docker diff mod_busybox_delete
+
+* Output
+C /etc
+D /etc/profile
+
+*
+docker run --name mod_busybox_change busybox:latest touch /etc/profile
+docker diff mod_busybox_change
+
+* SHOW 
+C /etc
+C /etc/profile
+
+///////////////////////////////////////////////////////////////////
+Reintroducing images, layers, repositories, and tags
+
+*
+docker commit mod_ubuntu
+
+*
+6528255cda2f9774a11a6b82be46c86a66b5feff913f5bb3e09536a54b08234d
+
+*
+quay.io/dockerinaction/ch3_hello_registry
+  |           |                 |
+Registry host |             Short name
+            User name
+
+*
+docker commit mod_ubuntu myuser/myfirstrepo:mytag
+# Outputs:
+# 82ec7d2c57952bf57ab1ffdf40d5374c4c68228e3e923633734e68a11f9a2b59
+
+*
+docker tag myuser/myfirstrepo:mytag myuser/mod_ubuntu
+
+/////////////////////////////////////////////////////////////////
+         Managing image size and layer limits
+/////////////////////////////////////////////////////////////////
+
+*
+docker tag ubuntu-git:latest ubuntu-git:1.9           + Create new tag: 1.9
+
+*
+docker run --name image-dev2 \
+--entrypoint /bin/bash \                              + Execute bash command
+ubuntu-git:latest -c "apt-get remove -y git"          + Remove Git
+  
+*
+docker commit image-dev2 ubuntu-git:removed           + Commit image
+
+docker tag -f ubuntu-git:removed ubuntu-git:latest    + Reassign latest tag
+
+docker images                                         + Examine image sizes
+
+-------------------
+REPOSITORY TAG IMAGE ID CREATED VIRTUAL SIZE
+ubuntu-git latest 826c66145a59 10 seconds ago 226.6 MB
+ubuntu-git removed 826c66145a59 10 seconds ago 226.6 MB
+ubuntu-git 1.9 3e356394c14e 41 hours ago 226 MB
+-------------------
+
+*
+docker history ubuntu-git:removed
+
+-------------------
+Outputs are something like:
+IMAGE CREATED CREATED BY SIZE
+826c66145a59 24 minutes ago /bin/bash -c apt-get remove 662 kB
+3e356394c14e 42 hours ago git 0 B
+bbf1d5d430cd 42 hours ago /bin/bash 37.68 MB
+b39b81afc8ca 3 months ago /bin/sh -c #(nop) CMD [/bin 0 B
+615c102e2290 3 months ago /bin/sh -c sed -i 's/^#\s*\ 1.895 kB
+837339b91538 3 months ago /bin/sh -c echo '#!/bin/sh' 194.5 kB
+53f858aaaf03 3 months ago /bin/sh -c #(nop) ADD file: 188.1 MB
+511136ea3c5a 22 months ago 0 B
+
+--------------------------------------------
+Exporting and importing flat file systems
+--------------------------------------------
+
+*
+docker run --name export-test \
+dockerinaction/ch7_packed:latest ./echo For Export                + Export file system contents
+
+docker export --output contents.tar export-test
+
+docker rm export-test
+
+tar -tf contents.tar                                              + Show archive contents
+
+*
+package main
+import "fmt"
+func main() {
+fmt.Println("hello, world!")
+}
+
+*
+docker run --rm -v "$(pwd)":/usr/src/hello \
+-w /usr/src/hello golang:1.3 go build -v
+
+*
+tar -cf static_hello.tar hello
+
+*
+docker import -c "ENTRYPOINT [\"/hello\"]" - \                     + Tar file streamed via UNIX pipe
+dockerinaction/ch7_static < static_hello.tar
+
+*
+docker run dockerinaction/ch7_static
+docker history dockerinaction/ch7_static                           + Outputs: hello, world!
+
+
+You’ll notice that the history for this image has only a single entry (and layer):
+IMAGE CREATED CREATED BY SIZE
+edafbd4a0ac5 11 minutes ago 1.824 MB
+
+--------------------------------------------------------------------------------------
+//////////////////////////////////////////////////////////////////////////////////////
+Versioning best practices
+
+*
+1.3.3, 1.3
+1.3.3-onbuild, 1.3-onbuild
+1.3.3-cross, 1.3-cross
+1.3.3-wheezy, 1.3-wheezy
+1.4.2, 1.4, 1, latest
+1.4.2-onbuild, 1.4-onbuild, 1-onbuild, onbuild
+1.4.2-cross, 1.4-cross, 1-cross, cross
+1.4.2-wheezy, 1.4-wheezy, 1-wheezy, wheezy
+
+*
+///////////////////////////////////////////////////////////////////////////////////////////
+------------------------------------------------------------------------------------------
+Build automation and advanced image considerations
+
+*
+Packaging Git with a Dockerfile
+
+*
+# An example Dockerfile for installing Git on Ubuntu
+FROM ubuntu:latest
+MAINTAINER "dockerinaction@allingeek.com"
+RUN apt-get install -y git
+ENTRYPOINT ["git"]
+
+*
+docker build --tag ubuntu-git:auto
+
+*
+Successfully built 0bca8436849b
+
+*
+docker images
+The new build tagged “auto” should now appear in the list:
+
+REPOSITORY TAG IMAGE ID CREATED VIRTUAL SIZE
+ubuntu-git auto 0bca8436849b 10 seconds ago 225.9 MB
+ubuntu-git latest 826c66145a59 10 minutes ago 226.6 MB
+ubuntu-git removed 826c66145a59 10 minutes ago 226.6 MB
+ubuntu-git 1.9 3e356394c14e 41 hours ago 226 MB
+
+*
+docker run --rm ubuntu-git:auto
+
+*
+Sending build context to Docker daemon 2.048 kB
+Sending build context to Docker daemon
+Step 0 : FROM ubuntu:latest
+---> b39b81afc8ca
+
+*
+Step 1 : MAINTAINER "dockerinaction@allingeek.com"
+---> Running in 938ff06bf8f4
+---> 80a695671201
+Removing intermediate container 938ff06bf8f4
+
+*
+Step 2 : RUN apt-get install -y git
+---> Running in 4438c3b2c049
+---> 1c20f8970532
+Removing intermediate container 4438c3b2c049
+
+*
+Step 3 : ENTRYPOINT git
+---> Running in c9b24b0f035c
+---> 89d726cf3514
+Removing intermediate container c9b24b0f035c
+
+*
+RUN This will not work
+
+*
+docker build --tag ubuntu-git:auto
+
+*
+The output will show which steps the builder was able to skip in favor of cached
+results:
+Sending build context to Docker daemon 2.048 kB
+Sending build context to Docker daemon
+
+********
+Step 0 : FROM ubuntu:latest
+---> b39b81afc8ca
+Step 1 : MAINTAINER "dockerinaction@allingeek.com"
+---> Using cache                                                             + Note use of cache
+---> 80a695671201
+Step 2 : RUN apt-get install -y git
+---> Using cache                                                             + Note use of cache
+---> 1c20f8970532
+Step 3 : ENTRYPOINT git                                                         
+---> Using cache                                                             + Note use of cache
+---> 89d726cf3514
+Step 4 : RUN This will not work
+---> Running in f68f0e0418b5
+/bin/sh: 1: This: not found
+INFO[0001] The command [/bin/sh -c This will not work] returned a non-zero
+code: 127
+
+*
+built d7a8ee0cebd4.
+
+-----------------------------------------------------------------------------
+Metadata instructions
+
+*
+.dockerignore
+mailer-base.df
+mailer-logging.df
+mailer-live.df
+
+*
+FROM debian:wheezy
+MAINTAINER Jeff Nickoloff "dia@allingeek.com"
+RUN groupadd -r -g 2200 example && \
+useradd -rM -g example -u 2200 example
+ENV APPROOT="/app" \
+APP="mailer.sh" \
+VERSION="0.6"
+LABEL base.name="Mailer Archetype" \
+base.version="${VERSION}"
+WORKDIR $APPROOT
+ADD . $APPROOT
+ENTRYPOINT ["/app/mailer.sh"]                             + This file does not exist yet
+EXPOSE 33333
+# Do not set the default user in the base otherwise
+# implementations will not be able to update the image
+# USER example:example
+
+
+*
+docker build -t dockerinaction/mailer-base:0.6 -f mailer-base.df .
+
+*
+Step 3 : ENV APPROOT "/app" APP "mailer.sh" VERSION "0.6"
+---> Running in 05cb87a03b1b
+---> 054f1747aa8d
+Removing intermediate container 05cb87a03b1b
+
+*
+Step 4 : LABEL base.name "Mailer Archetype" base.version "${VERSION}"
+---> Running in 0473087065c4
+---> ab76b163e1d7
+Removing intermediate container 0473087065c4
+
+*
+Step 5 : WORKDIR $APPROOT
+---> Running in 073583e0d554
+---> 363129ccda97
+Removing intermediate container 073583e0d554
+
+*
+Step 7 : EXPOSE 33333
+---> Running in a6c4f54b2907
+---> 86e0b43f234a
+Removing intermediate container a6c4f54b2907
+
+*
+docker inspect dockerinaction/mailer-base:0.6
+
+*
+"Env": [
+"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+"APPROOT=/app",
+"APP=mailer.sh",
+"VERSION=0.6"
+],
+...
+"Labels": {
+"base.name": "Mailer Archetype",
+"base.version": "0.6"
+},
+...
+"WorkingDir": "/app"
+
+/////////////////////////////////////////////////////////////////////
+File system instructions
+
+*
+FROM dockerinaction/mailer-base:0.6
+COPY ["./log-impl", "${APPROOT}"]
+RUN chmod a+x ${APPROOT}/${APP} && \
+chown example:example /var/log
+USER example:example
+VOLUME ["/var/log"]
+CMD ["/var/log/mailer.log"]
+
+*
+#!/bin/sh
+printf "Logging Mailer has started.\n"
+while true
+do
+MESSAGE=$(nc -l -p 33333)
+printf "[Message]: %s\n" "$MESSAGE" > $1
+sleep 1
+done
+
+*
+docker build -t dockerinaction/mailer-logging -f mailer-logging.df
+
+*
+docker run -d --name logging-mailer dockerinaction/mailer-logging
+
+*
+will have their messages logged to /var/log/mailer.log.
+
+*
+file mailer-live.df:
+FROM dockerinaction/mailer-base:0.6
+ADD ["./live-impl", "${APPROOT}"]
+RUN apt-get update && \
+apt-get install -y curl python && \
+curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py" && \
+python get-pip.py && \
+pip install awscli && \
+rm get-pip.py && \
+chmod a+x "${APPROOT}/${APP}"
+RUN apt-get install -y netcat
+USER example:example
+CMD ["mailer@dockerinaction.com", "pager@dockerinaction.com"]
+
+*
+#!/bin/sh
+printf "Live Mailer has started.\n"
+while true
+do
+MESSAGE=$(nc -l -p 33333)
+aws ses send-email --from $1 \
+--destination {\"ToAddresses\":[\"$2\"]} \
+--message "{\"Subject\":{\"Data\":\"Mailer Alert\"},\
+\"Body\":{\"Text\":{\"Data\":\"$MESSAGE}\"}}}"
+sleep 1
+done
+
+*
+docker build -t dockerinaction/mailer-live -f mailer-live.df .
+docker run -d --name live-mailer dockerinaction/mailer-live
+
+////////////////////////////////////////////////////////////////////
+Injecting downstream build-time behavior
+
+*
+ONBUILD COPY [".", "/var/myapp"]
+ONBUILD RUN go build /var/myapp
+
+*
+"ContainerConfig": {
+...
+"OnBuild": [
+"COPY [\".\", \"/var/myapp\"]",
+"RUN go build /var/myapp"
+],
+...
+
+*
+FROM busybox:latest
+WORKDIR /app
+RUN touch /app/base-evidence
+ONBUILD RUN ls -al /app
+
+*
+FROM dockerinaction/ch8_onbuild
+RUN touch downstream-evidence
+RUN ls -al
+
+*
+docker build -t dockerinaction/ch8_onbuild -f base.df
+
+*
+The output of the build should look like this:
+Sending build context to Docker daemon 3.072 kB
+Sending build context to Docker daemon
+Step 0 : FROM busybox:latest
+---> e72ac664f4f0
+Step 1 : WORKDIR /app
+---> Running in 4e9a3df4cf17
+---> a552ff53eedc
+Removing intermediate container 4e9a3df4cf17
+Step 2 : RUN touch /app/base-evidence
+---> Running in 352819bec296
+---> bf38c3e396b2
+Removing intermediate container 352819bec296
+Step 3 : ONBUILD run ls -al /app
+---> Running in fd70cef7e6ca
+---> 6a53dbe28364
+Removing intermediate container fd70cef7e6ca
+Successfully built 6a53dbe28364
+
+
+* Then build the downstream image with this command:
+docker build -t dockerinaction/ch8_onbuild_down -f downstream.df
+
+*
+Sending build context to Docker daemon 3.072 kB
+Sending build context to Docker daemon
+Step 0 : FROM dockerinaction/ch8_onbuild
+# Executing 1 build triggers
+Trigger 0, RUN ls -al /app
+Step 0 : RUN ls -al /app
+---> Running in dd33ddea1fd4
+total 8
+drwxr-xr-x 2 root root 4096 Apr 20 23:08 .
+drwxr-xr-x 30 root root 4096 Apr 20 23:08 ..
+-rw-r--r-- 1 root root 0 Apr 20 23:08 base-evidence
+---> 92782cc4e1f6
+Removing intermediate container dd33ddea1fd4
+Step 1 : RUN touch downstream-evidence
+---> Running in 076b7e110b6a
+---> 92cc1250b23c
+Removing intermediate container 076b7e110b6a
+Step 2 : RUN ls -al .
+---> Running in b3fe2daac529
+total 8
+drwxr-xr-x 2 root root 4096 Apr 20 23:08 .
+drwxr-xr-x 31 root root 4096 Apr 20 23:08 ..
+-rw-r--r-- 1 root root 0 Apr 20 23:08 base-evidence
+-rw-r--r-- 1 root root 0 Apr 20 23:08 downstream-evidence
+---> 55202310df7b
+Removing intermediate container b3fe2daac529
+Successfully built 55202310df7b
+
+*******************************************************************
+how this is used in the wild. Here are a few of my favorites:
+ https://registry.hub.docker.com/_/python/
+ https://registry.hub.docker.com/_/golang/
+ https://registry.hub.docker.com/_/node/
+
+********************************************************************
+Using startup scripts and multiprocess containers
+Environmental preconditions validation
+
+*
+#!/bin/bash
+set -e
+if [ -n "$WEB_PORT_80_TCP" ]; then
+if [ -z "$WEB_HOST" ]; then
+WEB_HOST='web'
+else
+echo >&2 '[WARN]: Linked container, "web" overridden by $WEB_HOST.'
+echo >&2 "===> Connecting to WEB_HOST ($WEB_HOST)"
+fi
+fi
+if [ -z "$WEB_HOST" ]; then
+echo >&2 '[ERROR]: specify a linked container, "web" or WEB_HOST environment
+variable'
+exit 1
+fi
+exec "$@" # run the default command
+
+**********************************************************
+Building hardened application images
+which uses a specific snapshot of debian:jessie as a base:
+
+docker pull debian:jessie
+# Output:
+# ...
+# Digest: sha256:d5e87cfcb730...
+# Dockerfile:
+FROM debian@sha256:d5e87cfcb730...
+
+*********************************************************
+User permissions
+
+*
+FROM busybox:latest
+USER 1000:1000
+RUN touch /bin/busybox
+
+*
+FROM busybox:latest
+USER 1000:1000
+ENTRYPOINT ["nc"]
+CMD ["-l", "-p", "80", "0.0.0.0"]
+
+*
+docker build \
+-t dockerinaction/ch8_perm_denied \
+-f UserPermissionDenied.df \
+.
+docker run dockerinaction/ch8_perm_denied
+# Output:
+# nc: bind: Permission denied
+
+*******************************************************************
+# add our user and group first to make sure their IDs get assigned
+# consistently, regardless of whatever dependencies get added
+RUN groupadd -r postgres && useradd -r -g postgres postgres
+
+*
+FROM ubuntu:latest
+# Set the SUID bit on whoami
+RUN chmod u+s /usr/bin/whoami
+# Create an example user and set it as the default
+RUN adduser --system --no-create-home --disabled-password --disabled-login \
+--shell /bin/sh example
+USER example
+# Set the default to compare the container user and
+# the effective user for whoami
+CMD printf "Container running as: %s\n" $(id -u -n) && \
+printf "Effectively running whoami as: %s\n" $(whoami)
+
+*
+docker build -t dockerinaction/ch8_whoami .
+docker run dockerinaction/ch8_whoami
+
+*
+Container running as: example
+Effectively running whoami as: root
+
+*
+Running a quick search on your base image will give you an idea of how many and
+which files have these permissions:
+
+*
+docker run --rm debian:wheezy find / -perm +6000 -type f
+
+It will display a list like this:
+/sbin/unix_chkpwd
+/bin/ping6
+/bin/su
+/bin/ping
+/bin/umount
+/bin/mount
+/usr/bin/chage
+/usr/bin/passwd
+/usr/bin/gpasswd
+/usr/bin/chfn
+/usr/bin/newgrp
+/usr/bin/wall
+/usr/bin/expiry
+/usr/bin/chsh
+/usr/lib/pt_chown
+
+*
+This command will find all of the SGID files:
+docker run --rm debian:wheezy find / -perm +2000 -type f
+
+*
+The resulting list is much shorter:
+/sbin/unix_chkpwd
+/usr/bin/chage
+/usr/bin/wall
+/usr/bin/expiry
+
+*
+RUN for i in $(find / -type f \( -perm +6000 -o -perm +2000 \)); \
+do chmod ug-s $i; done
+
+*
+//////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+Public and private software distribution
+/////////////////////////////////////////////////////////////////////////////////
+
+*********************************
+Publishing with hosted registries
+
+***********************************************************************
+Publishing with public repositories: Hello World via Docker Hub
+
+*
+FROM busybox:latest                      + From HelloWorld.df
+CMD echo Hello World
+-----------------------------------------------------------------
+Build your new image with the following command:
+
+*
+docker build \
+-t <insert Docker Hub username>/hello-dockerfile \          + Insert your username
+-f HelloWorld.df \
+
+* authenticated session
+docker login
+
+*
+docker push <insert Docker Hub username>/hello-dockerfile              + Insert your username
+
+*
+The push refers to a repository
+[dockerinaction/hello-dockerfile] (len: 1)
+7f6d4eb1f937: Image already exists
+8c2e06607696: Image successfully pushed
+6ce2e90b0bc7: Image successfully pushed
+cf2616975b4a: Image successfully pushed
+Digest:
+sha256:ef18de4b0ddf9ebd1cf5805fae1743181cbf3642f942cae8de7c5d4e375b1f20
+
+*
+docker search dockerinaction/hello-dockerfile
+
+**************************************************
+Publishing public projects with automated builds
+
+**************************************************
+CREATING A DOCKER HUB AUTOMATED BUILD
+https://git-scm.com.
+
+*
+FROM busybox:latest
+CMD echo Hello World
+
+*
+git init
+git config --global user.email "you@example.com"          + Use your email address
+git config --global user.name "Your Name"                 + Use your full name
+git remote add origin \                                   + Use your GitHub username
+https://github.com/<your username>/hello-docker.git
+
+*****************************************************************
+https://hub.docker.com.
+******************************************************************
+
+*
+Now go back to your terminal to add and
+push your work to your GitHub repository.
+
+*
+git add Dockerfile
+git commit -m "first commit"
+git push -u origin master
+
+* Once that is complete *
+docker search <your username>/hello-docker                    + Insert your Docker Hub username
+
+*
+////////////////////////////////////////////////////////////////////////////////////////////////
+Private hosted repositories
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+*
+docker login
+# Username: dockerinaction
+# Password:
+# Email: book@dockerinaction.com
+# WARNING: login credentials saved in /Users/xxx/.dockercfg.
+# Login Succeeded
+
+docker login tutum.co
+# Username: dockerinaction
+# Password:
+# Email: book@dockerinaction.com
+# WARNING: login credentials saved in /Users/xxx/.dockercfg.
+# Login Succeeded
+
+docker login quay.io
+# Username: dockerinaction
+# Password:
+# Email: book@dockerinaction.com
+# WARNING: login credentials saved in /Users/xxx/.dockercfg.
+# Login Succeeded
+
+*******************************
+Introducing private registries
+
+*
+Using the registry image
+
+*
+docker run -d -p 5000:5000 \
+-v "$(pwd)"/data:/tmp/registry-dev \
+--restart=always --name local-registry registry:2
+
+*********************************
+docker pull dockerinaction/ch9_registry_bound                             + Pull demo image from Docker Hub
+
+docker images -f "label=dia_excercise=ch9_registry_bound"                 + Verify image is discoverable with label filter
+
+docker tag dockerinaction/ch9_registry_bound \                            + Push demo image into your private registry
+localhost:5000/dockerinaction/ch9_registry_bound  
+docker push localhost:5000/dockerinaction/ch9_registry_bound                
+ 
+******************************************************************
+Consuming images from your registry
+
+*
+docker rmi \
+
+dockerinaction/ch9_registry_bound \
+localhost:5000/dockerinaction/ch9_registry_bound                          + Remove tagged reference
+
+docker images -f "label=dia_excercise=ch9_registry_bound"                 + Pull from registry again
+
+docker pull localhost:5000/dockerinaction/ch9_registry_bound           
+
+docker images -f "label=dia_excercise=ch9_registry_bound"                 + Demonstrate that image is back
+
+docker rm -vf local-registry                                              + Clean up local registry
+
+
+******************************************************************
+Manual image publishing and distribution
+
+*A sample distribution infrastructure using the File Transfer Protocol *
+
+*
+docker pull registry:2
+
+*
+docker run -d --name ftp-transport -p 21:12 dockerinaction/ch9_ftpd
+
+*
+docker save -o ./registry.2.tar registry:2
+
+*
+docker run --rm --link ftp-transport:ftp_server \
+-v "$(pwd)":/data \
+dockerinaction/ch9_ftp_client \
+-e 'cd pub/incoming; put registry.2.tar; exit' ftp_server
+
+*
+docker run --rm --link ftp-transport:ftp_server \
+-v "$(pwd)":/data \
+dockerinaction/ch9_ftp_client \
+-e "cd pub/incoming; ls; exit" ftp_server
+
+***********************************
+Remove
+rm registry.2.tar
+docker rmi registry:2                            + Need to remove any registry containers first
+
+***********************************
+Then download the image file from your FTP server:
+
+*
+docker run --rm --link ftp-transport:ftp_server \
+-v "$(pwd)":/data \
+dockerinaction/ch9_ftp_client \
+-e 'cd pub/incoming; get registry.2.tar; exit' ftp_server
+
+* registry.2.tar file in your local directory *
+*
+docker load -i registry.2.tar
+
+************************************************************************************
+Image source distribution workflows
+Distributing a project with Dockerfile on GitHub
+
+*
+git init
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+git add Dockerfile
+# git add *whatever other files you need for the image*
+git commit -m "first commit"
+git remote add origin https://github.com/<your username>/<your repo>.git
+git push -u origin master
+
+Meanwhile, a consumer would use a general command set that looks like this:
+git clone https://github.com/<your username>/<your repo>.git
+cd <your-repo>
+docker build -t <your username>/<your repo>
+
+//////////////////////////////////////////////////////////////////////////////
+                      Running customized registries
+//////////////////////////////////////////////////////////////////////////////
+Running a personal registry
+Reintroducing the Image
+
+*
+docker run -d --name personal_registry \
+-p 5000:5000 --restart=always \
+registry:2
+
+*
+docker tag registry:2 localhost:5000/distribution:2
+docker push localhost:5000/distribution:2
+
+*
+docker rmi localhost:5000/distribution:2
+docker pull localhost:5000/distribution:2
+
+************************************************
+Introducing the V2 API
+************************************************
+
+*
+FROM gliderlabs/alpine:latest                       + From curl.df
+LABEL source=dockerinaction
+LABEL category=utility
+RUN apk --update add curl
+ENTRYPOINT ["curl"]
+CMD ["--help"]
+
+docker build -t dockerinaction/curl -f curl.df .
+
+*
+docker run --rm --net host dockerinaction/curl -Is
+http://localhost:5000/v2/                                        + Note the /v2/
+
+*
+That request will result in the following output:
+HTTP/1.1 200 OK
+Content-Length: 2
+Content-Type: application/json; charset=utf-8
+Docker-Distribution-Api-Version: registry/2.0
+
+*  V1 Have problem
+HTTP/1.1 404 NOT FOUND
+Server: gunicorn/19.1.1
+Connection: keep-alive
+Content-Type: text/html
+Content-Length: 233
+
+*
+docker run --rm -u 1000:1000 --net host \
+dockerinaction/curl -s http://localhost:5000/v2/distribution/tags/list
+
+*
+Running that command should display a result like the following:
+{"name":"distribution","tags":["2"]}
+
+****************************
+docker tag \
+localhost:5000/distribution:2 \
+localhost:5000/distribution:two                                     + Creative tag name
+
+docker push localhost:5000/distribution:two
+
+docker run --rm \
+-u 1000:1000 \                                                      + Run as unprivileged user
+--net host \                                                        + Run without network namespace
+dockerinaction/curl \
+-s http://localhost:5000/v2/distribution/tags/list
+
+*
+The curl command will return output like the following:
+{"name":"distribution","tags":["2","two"]}
+
+**************************************************************************************************
+upstream docker-registry {                                      + From basic-proxy.conf
+server registry:5000;                                           + Link alias requirement
+
+*
+server {
+listen 80;                                                       + Container port requirement
+# Use the localhost name for testing purposes
+server_name localhost;
+# A real deployment would use the real hostname where it is deployed
+# server_name mytotallyawesomeregistry.com;
+
+*
+client_max_body_size 0;
+chunked_transfer_encoding on;
+
+*
+# We’re going to forward all traffic bound for the registry
+location /v2/ {                                                   + Note /v2/prefix
+proxy_pass       http://docker-registry;                            + Resolves to the upstream
+proxy_set_header Host               $http_host;
+proxy_set_header X-Real-IP          $remote_addr;
+proxy_set_header X-Forwarded-For    $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto  $scheme;
+proxy_read_timeout 900;
+}
+}
+
+
+*
+FROM nginx:latest                                       + From basic-proxy.df
+LABEL source=dockerinaction
+LABEL category=infrastructure
+COPY ./basic-proxy.conf /etc/nginx/conf.d/default.conf
+
+*
+docker build -t dockerinaction/basic_proxy -f basic-proxy.df
+
+*
+docker run -d --name basic_proxy -p 80:80 \             + Start reverse proxy
+--link personal_registry:registry \                     + Link to registry
+dockerinaction/basic_proxy
+
+*
+docker run --rm -u 1000:1000 --net host \               + Run cURL to query your registry through the proxy
+dockerinaction/curl \
+-s http://localhost:80/v2/distribution/tags/list
+
+
+--------------------------------------------------
+SSH         Secure Shell
+--------------------------------------------------
+
+*
+create the tunnel:
+ssh -f -i my_key user@ssh-host -L 4000:localhost:5000 -N
+
+
+* generate a 4096-bit RSA key pair *
+docker run --rm -e COMMON_NAME=localhost -e KEY_NAME=localhost \
+-v "$(pwd)":/certs centurylink/openssl
+
+*
+upstream docker-registry {                                  + From tls-proxy.conf
+server registry:5000;
+}
+
+server {
+listen 443 ssl;                                             + Note use of port 443 and “ssl”
+server_name localhost                                       + Named localhost
+
+client_max_body_size 0;
+chunked_transfer_encoding on;
+
+ssl_certificate /etc/nginx/conf.d/localhost.crt;            + Note SSL configuration
+ssl_certificate_key /etc/nginx/conf.d/localhost.key;
+
+location /v2/ {
+proxy_pass http://docker-registry;
+proxy_set_header Host $http_host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 900;
+}
+}
+
+
+*************************
+Create a new file named tls-proxy.df and insert the following lines:
+
+*
+FROM nginx:latest
+LABEL source=dockerinaction
+LABEL category=infrastructure
+COPY ["./tls-proxy.conf", \
+"./localhost.crt", \                                       + Copy new certificate
+"./localhost.key", \                                       + Copy private key
+"/etc/nginx/conf.d/"]
+
+***********************************************************
+Build your new image with the following docker build command:
+
+*
+docker build -t dockerinaction/tls_proxy -f tls-proxy.df .
+
+***********************************************************
+Now put it all together by starting your proxy and testing it with curl:
+
+*
+docker run -d --name tls-proxy -p 443:443 \                   + Note port 443
+--link personal_registry:registry \                           + Note link
+dockerinaction/tls_proxy
+
+*
+docker run --rm \
+--net host \
+dockerinaction/curl -ks \                                     + Note “k” flag
+https://localhost:443/v2/distribution/tags/list               + Note “https” and “443”
+
+*****
+{"name":"distribution","tags":["2","two"]}
+*****
+
+
+////////////////////////////////////////////////////////////////////
+Adding an authentication layer              >bcrypt algorithm
+////////////////////////////////////////////////////////////////////
+you can do so using Docker.
+Create an image from the following Dockerfile (named htpasswd.df)
+
+*
+FROM debian:jessie
+LABEL source=dockerinaction
+LABEL category=utility
+RUN apt-get update && \
+apt-get install -y apache2-utils
+ENTRYPOINT ["htpasswd"]
+
+//////////////////////////////////////////////////////////////////////
+Build your image once you have the Dockerfile:
+
+*
+docker build -t htpasswd -f htpasswd.df .
+
+//////////////////////////////////////////////////////////////////////////////////////////////////
+With your new image available, you can create a new entry for a password file like so:
+
+*
+docker run -it --rm htpasswd -nB <USERNAME>
+
+* result into a file named registry.password.
+registryuser:$2y$05$mfQjXkprC94Tjk4IQz4vOOK6q5VxUhsxC6zajd35ys1O2J2x1aLbK
+
+//////////////////////////////////////////////////////////////////////////////////
+Once you have a password file, you can implement HTTP Basic authentication in
+NGINX by simply adding two lines to the configuration file presented in section 10.2.2.
+
+*
+Create tls-authproxy.conf and add these lines:
+# filename: tls-auth-proxy.conf
+upstream docker-registry {
+server registry:5000;
+}
+
+server {
+listen 443 ssl;
+server_name localhost
+
+client_max_body_size 0;
+chunked_transfer_encoding on;
+
+# SSL
+ssl_certificate /etc/nginx/conf.d/localhost.crt;
+ssl_certificate_key /etc/nginx/conf.d/localhost.key;
+
+location /v2/ {
+auth_basic "registry.localhost";                                     + Authentication realm
+auth_basic_user_file /etc/nginx/conf.d/registry.password;            + Password file
+
+proxy_pass http://docker-registry;
+proxy_set_header Host $http_host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 900;
+}
+}
+
+//////////////////////////////////////////////////////////////
+Now create a new Dockerfile named tls-auth-proxy.df:
+
+*
+FROM nginx:latest
+LABEL source=dockerinaction
+LABEL category=infrastructure
+COPY ["./tls-auth-proxy.conf", \
+"./localhost.crt", \
+"./localhost.key", \
+"./registry.password", \
+"/etc/nginx/conf.d/"]
+
+///////////////////////////////////////////////////////////////
+The following configuration file (named tls-auth-registry.yml) adds TLS and HTTP
+basic authentication to an otherwise default Distribution container:
+version: 0.1
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+storage:
+filesystem:
+rootdirectory: /var/lib/registry
+cache:
+layerinfo: inmemory
+maintenance:
+uploadpurging:
+enabled: false
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+tls:
+certificate: /localhost.crt                       | TLS configuration
+key: /localhost.key
+debug:
+addr: localhost:5001
+
+auth:
+htpasswd:
+realm: registry.localhost                         | Authentication configuration
+path: /registry.password
+
+/////////////////////////////////////////////////////////////////
+named tls-authregistry.df)
+
+*
+# Filename: tls-auth-registry.df
+FROM registry:2
+LABEL source=dockerinaction
+LABEL category=infrastructure
+# Set the default argument to specify the config file to use
+# Setting it early will enable layer caching if the
+# tls-auth-registry.yml changes.
+CMD ["/tls-auth-registry.yml"]
+COPY ["./tls-auth-registry.yml", \
+"./localhost.crt", \
+"./localhost.key", \
+"./registry.password", \
+"/"]
+
+*
+docker build -t dockerinaction/secure_registry -f tls-auth-registry.df .
+
+docker run -d --name secure_registry \
+-p 5443:5000 --restart=always \
+dockerinaction/secure_registry
+
+********************************************
+Client compatibility
+********************************************
+Start by placing the new proxy configuration in a file named dual-client-proxy.conf
+and include the following:
+
+*
+upstream docker-registry-v2 {
+server registry2:5000;
+}
+upstream docker-registry-v1 {
+server registry1:5000;
+}
+
+server {
+listen 80;
+server_name localhost;
+client_max_body_size 0;
+chunked_transfer_encoding on;
+
+*
+location /v1/ {                                                  + V1 URL prefix
+proxy_pass http://docker-registry-v1;                            + V1 upstream routing
+proxy_set_header Host $http_host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 900;
+}
+
+location /v2/ {                                                 + V2 URL prefix
+proxy_pass http://docker-registry-v2;                           + V2 upstream routing
+proxy_set_header Host $http_host; 
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 900;
+}
+}
+
+*
+FROM nginx:latest
+LABEL source=dockerinaction
+LABEL category=infrastructure
+COPY ./dual-client-proxy.conf /etc/nginx/conf.d/default.conf
+
+* Last, create your new image:
+docker build -t dual_client_proxy -f dual-client-proxy.df .
+
+*  registry software
+docker run -d --name registry_v1 registry:0.9.1
+
+*
+docker run -d --name dual_client_proxy \
+-p 80:80 \
+--link personal_registry:registry2 \
+--link registry_v1:registry1 \
+dual_client_proxy
+
+docker run --rm -u 1000:1000 \
+--net host \                                                + Test v1 from host
+dockerinaction/curl -s http://localhost:80/v1/_ping
+
+docker run --rm -u 1000:1000 \
+--net host \                                                + Test v2 from host
+dockerinaction/curl -Is http://localhost:80/v2/
+
+*******************************************************
+Before going to production
+*******************************************************
+
+*
+state secret in the configuration file at
+http:
+secret: somedefaultsecret
+
+*
+docker run -d -e REGISTRY_HTTP_SECRET=<MY_SECRET> registry:2
+
+*
+Set REGISTRY_LOG_LEVEL to error or warn:
+docker run -d -e REGISTRY_LOG_LEVEL=error registry:2
+
+* Distribution doesn’t start a debug endpoint:
+docker run -d -e REGISTRY_HTTP_DEBUG='' registry:2
+
+///////////////////////////////////////////////////////
+Durable blob storage
+///////////////////////////////////////////////////////
+
+*
+storage:
+filesystem:
+rootdirectory: /var/lib/registry
+
+*********************************************************
+Hosted remote storage with Microsoft’s Azure
+*********************************************************
+http://azure.microsoft.com/services/storage/.
+azure-config.yml
+
+*
+# Filename: azure-config.yml
+version: 0.1
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+storage:
+azure:                                            + Azure-specific fields
+accountname: <your account name>
+accountkey: <your base64 encoded account key>
+container: <your container>
+realm: core.windows.net
+cache:
+layerinfo: inmemory
+maintenance:
+uploadpurging:
+enabled: false
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+***********************************
+You could name it azure-config.df:
+***********************************
+*
+# Filename: azure-config.df
+FROM registry:2
+LABEL source=dockerinaction
+LABEL category=infrastructure
+# Set the default argument to specify the config file to use
+# Setting it early will enable layer caching if the
+# azure-config.yml changes.
+CMD ["/azure-config.yml"]
+COPY ["./azure-config.yml","/azure-config.yml"]
+
+And you can build it with the following docker build command:
+
+*
+docker build -t dockerinaction/azure-registry -f azure-config.df
+
+///////////////////////////////////////////////////////////////
+Hosted remote storage with Amazon’s Simple Storage Service
+///////////////////////////////////////////////////////////////
+
+*
+# Filename: s3-config.yml
+version: 0.1
+
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+storage:
+cache:
+layerinfo: inmemory
+s3:                                                  + S3 configuration
+accesskey: <your awsaccesskey>
+secretkey: <your awssecretkey>
+region: <your bucket region>
+bucket: <your bucketname>
+encrypt: true
+secure: true
+v4auth: true
+chunksize: 5242880
+rootdirectory: /s3/object/name/prefix
+maintenance:
+uploadpurging:
+enabled: false
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+
+*
+# Filename: s3-config.df
+FROM registry:2
+LABEL source=dockerinaction
+LABEL category=infrastructure
+# Set the default argument to specify the config file to use
+# Setting it early will enable layer caching if the
+# s3-config.yml changes.
+CMD ["/s3-config.yml"]
+COPY ["./s3-config.yml","/s3-config.yml"]
+
+And you can build it with the following docker build command:
+
+docker build -t dockerinaction/s3-registry -f s3-config.df
+
+///////////////////////////////////////////////////////
+Internal remote storage with RADOS (Ceph)
+///////////////////////////////////////////////////////
+Reliable Autonomic Distributed Object Store (RADOS)
+(http://ceph.com)
+
+*
+version: 0.1
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+storage:
+cache:
+layerinfo: inmemory
+
+storage:
+rados:                           + RADOS configuration
+poolname: radospool
+username: radosuser
+chunksize: 4194304
+maintenance:
+uploadpurging:
+enabled: false
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+//////////////////////////////////////////////////////
+Scaling access and latency improvements
+//////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////
+Integrating a metadata cache
+//////////////////////////////////////////////////////
+
+*
+the registry
+will attempt to connect to a Redis server at redis-host on port 6379:
+# Filename: redis-config.yml
+version: 0.1
+
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+storage:
+cache:                                       + Cache configuration
+blobdescriptor: redis
+s3:
+accesskey: <your awsaccesskey>
+secretkey: <your awssecretkey>
+region: <your bucket region>
+bucket: <your bucketname>
+encrypt: true
+secure: true
+v4auth: true
+chunksize: 5242880
+rootdirectory: /s3/object/name/prefix
+maintenance:
+uploadpurging:
+enabled: false
+
+redis:                                + Redis-specific details
+addr: redis-host:6379
+password: asecret
+dialtimeout: 10ms
+readtimeout: 10ms
+writetimeout: 10ms
+pool:
+maxidle: 16
+maxactive: 64
+idletimeout: 300s
+
+* Redis container: *
+docker run -d --name redis redis
+docker build -t dockerinaction/redis-registry -f redis-config.df .
+docker run -d --name redis-registry \
+--link redis:redis-host -p 5001:5000 \
+dockerinaction/redis-registry
+
+////////////////////////////////////////////////////////////////////
+Streamline blob transfer with storage middleware
+////////////////////////////////////////////////////////////////////
+
+*
+The following sample is complete with S3, Redis, and CloudFront:
+
+# Filename: scalable-config.conf
+version: 0.1
+
+log:
+level: debug
+fields:
+service: registry
+environment: development
+
+http:
+addr: :5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+storage:
+cache:
+blobdescriptor: redis
+s3:
+accesskey: <your awsaccesskey>
+secretkey: <your awssecretkey>
+region: <your bucket region>
+bucket: <your bucketname>
+encrypt: true
+secure: true
+v4auth: true
+chunksize: 5242880
+rootdirectory: /s3/object/name/prefix
+maintenance:
+uploadpurging:
+enabled: false
+
+redis:
+addr: redis-host:6379
+password: asecret
+dialtimeout: 10ms
+readtimeout: 10ms
+writetimeout: 10ms
+pool:
+maxidle: 16
+maxactive: 64
+idletimeout: 300s
+
+middleware:                                        + Middleware configuration
+storage:
+- name: cloudfront
+options:
+baseurl: <https://my.cloudfronted.domain.com/>
+privatekey: </path/to/pem>
+keypairid: <cloudfrontkeypairid>
+duration: 3000
+
+*
+(http://aws.amazon.com/cloudfront)
+
+/////////////////////////////////////////////////////
+Integrating through notifications
+/////////////////////////////////////////////////////
+
+*
+(https://github.com/elastic/elasticsearch)
+
+*
+Integrating Distribute with Elasticsearch
+
+*
+docker pull elasticsearch:1.6
+docker pull dockerinaction/ch10_calaca
+docker pull dockerinaction/ch10_pump
+
+//////////////////////////////////////////////////////
+Notifications are delivered as JSON objects.
+//////////////////////////////////////////////////////
+
+*
+{ "events": [{
+"id": "921a9db6-1703-4fe4-9dda-ea71ad0014f1",
+"timestamp": ...
+"action": "push",
+"target": {
+"mediaType": ...
+"length": ...
+"digest": ...
+"repository": ...
+"url": ...
+},
+"request": {
+"id": ...
+"addr": ...
+"host": ...
+"method": ...
+"useragent": ...
+},
+"actor": {},
+"source": {
+"addr": ...
+"instanceID": ...
+}
+}]}
+
+*
+docker run -d --name elasticsearch -p 9200:9200 \
+elasticsearch:1.6 -Des.http.cors.enabled=true
+
+docker run -d --name es-pump -p 8000 \
+--link elasticsearch:esnode \
+dockerinaction/ch10_pump
+
+***************************************************************
+Next, create a container to run the Calaca web interface:
+
+*
+docker run -d --name calaca -p 3000:3000 \
+dockerinaction/ch10_calaca
+
+*
+VBoxManage controlvm "$(docker-machine active)" natpf1 \
+"tcp-port9200,tcp,,9200,,9200"
+VBoxManage controlvm "$(docker-machine active)" natpf1 \
+"tcp-port3000,tcp,,3000,,3000"
+
+***********************************************************
+Create a new file and copy in the following configuration:
+# Filename: hooks-config.yml
+version: 0.1
+
+log:
+level: debug
+formatter: text
+fields:
+service: registry
+environment: staging
+
+storage:
+filesystem:
+rootdirectory: /var/lib/registry
+maintenance:
+uploadpurging:
+enabled: true
+age: 168h
+interval: 24h
+dryrun: false
+
+http:
+addr: 0.0.0.0:5000
+secret: asecretforlocaldevelopment
+debug:
+addr: localhost:5001
+
+notifications:                                         + Notification configuration
+endpoints:
+- name: webhookmonitor
+disabled: false
+url: http://webhookmonitor:8000/
+timeout: 500
+threshold: 5
+backoff: 1000
+
+*
+docker run -d --name ch10-hooks-registry -p 5555:5000 \
+--link es-pump:webhookmonitor \
+-v "$(pwd)"/hooks-config.yml:/hooks-config.yml \
+registry:2 /hooks-config.yml
+
+*
+docker tag dockerinaction/curl localhost:5555/dockerinaction/curl
+docker push localhost:5555/dockerinaction/curl
+
+*
+docker pull localhost:5555/dockerinaction/curl
+
+*
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/////////////////////////////////////////////////////////////////////////////
+Multi-Container and Multi-Host Environments
+/////////////////////////////////////////////////////////////////////////////
+
+*********************************************************
+Declarative environments with Docker Compose
+*********************************************************.
+
+****
+Docker Compose: up and running on day one
+
+*
+YAML files (http://yaml.org)
+
+*
+https://docs.docker.com/compose/install/.
+
+*
+1 Install Docker.
+2 Install Docker Compose.
+3 Install and use Git to clone the development environment.
+
+***************************************************************************************************************
+create a new directory named wp-example and copy the following docker-compose.yml file into that directory:
+
+Step iteration
+***************************************************************************************************************
+*
+# Filename: docker-compose.yml
+wordpress:                                             + Defines service named wordpress
+image: wordpress:4.2.2                                 + Uses official wordpress:4.2.2 image
+links:
+- db:mysql                                             + Models link dependency on db service
+ports:
+- 8080:80                                              + Maps port 80 on container to port 8080 on host
+
+db:                                                    + Defines service named db
+image: mariadb                                         + Uses official mariadb:latest image
+environment:
+MYSQL_ROOT_PASSWORD: example                           + Sets administrative database password through environment variable
+
+*********************************************************************
+2. Change to the directory where you created the docker-compose.yml
+
+*********************************************************************
+*
+docker-compose up
+
+* result
+Creating wpexample_db_1...
+Creating wpexample_wordpress_1...
+
+*
+docker ps
+docker-compose ps
+
+*
+docker-compose rm -v
+
+///////////////////////////////////////////////////////////////////////////
+A complicated architecture: distribution and Elasticsearch integration
+///////////////////////////////////////////////////////////////////////////
+*************************************
+cloning an existing environment from version control and launching it with Compose:
+*************************************
+
+*
+git clone https://github.com/dockerinaction/ch11_notifications.git
+cd ch11_notifications
+docker-compose up -d
+
+*
+docker-compose logs
+
+*
+docker-compose logs pump elasticsearch
+
+////////////////////////////////////////////////////////////////
+Suppose you have another service that you’d like to bind on port 3000. This would
+conflict with the calaca service in this example. Making the change is as simple as
+changing ch11_notifications/docker-compose.yml and running docker-compose
+up again. Take a look at the file:
+
+registry:
+build: ./registry
+ports:
+- "5555:5000"                                     + Map registry to port 5555 on host
+links:
+- pump:webhookmonitor                             + Link registry to pump service
+
+pump:
+build: ./pump
+expose:
+- "8000"                                          + Export port 8000 to dependent services
+links:
+- elasticsearch:esnode                            + Link pump to elasticsearch service
+
+elasticsearch:
+image: elasticsearch:1.6                          + Use official elasticsearch image
+ports:
+- "9200:9200"                                     + Map port 9200 on elasticsearch to port 9200 on host
+command: "-Des.http.cors.enabled=true"            + Pass flag to ElasticSearch that enables cross origin calls
+
+calaca:
+build: ./calaca                                   + Use local sources for calaca service
+ports:
+- "3000:3000"                                     + Map port 3000 on host to 3000 on calaca service
+
+*
+Change the last line where it reads 3000:3000 to 3001:3000 and save the file. With the
+change made, you can rebuild the environment by simply running docker-compose
+up –d again
+
+* rebuild all the services in your environment, run the following:
+docker-compose build
+
+* This command will rebuild both the calaca and pump services:
+docker-compose build calaca pump
+
+* Stop and remove the containers you created
+docker-compose rm -vf
+
+*
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////
+Iterating within an environment
+////////////////////////////////////////////////////////////////
+
+*
+git clone https://github.com/dockerinaction/ch11_coffee_api.git
+
+* Build service
+docker-compose build
+
+*
+docker-compose pull
+
+*  Start with the db service and pay special attention to the logs:
+docker-compose up -d db
+
+*
+docker-compose up
+
+* proxy service (contained in docker-compose.yml)
+docker-compose up --no-dep -d proxy
+
+* http://localhost:8080/api/coffeeshops
+
+*
+{
+"coffeeshops": []
+}
+
+*
+curl -H "Content-Type: application/json" \
+-X POST \
+-d '{"name":"Albina Press", "address": " 5012 Southeast Hawthorne
+Boulevard, Portland, OR", "zipcode": 97215, "price": 2,
+"max_seats": 40, "power": true, "wifi": true}' \
+http://localhost:8080/api/coffeeshops/
+
+* You can test by reloading /api/coffeeshops/ in your browser.
+
+*
+{
+"coffeeshops": [
+{
+"address": " 5012 Southeast Hawthorne Boulevard, Portland, OR",
+"id": 35,
+"max_seats": 40,
+"name": "Albina Press",
+"power": true,
+"price": 2,
+"wifi": true,
+"zipcode": 97215
+}
+]
+}
+
+*
+Open http://localhost:8080/api/ping
+
+*
+@api.route('/ping')
+def ping():
+return os.getenv('HOSTNAME')
+
+*
+git checkout feature-ping
+
+*
+docker-compose build coffee
+docker-compose up -d
+
+*
+///////////////////////////////////////////////////////
+Scale and remove services
+///////////////////////////////////////////////////////
+
+*
+docker-compose ps coffee
+
+*
+The output should look something like the following:
+Name Command State Ports
+----------------------------------------------------------------------------
+ch11coffeeapi_coffee_1 ./entrypoint.sh Up 0.0.0.0:32807->3000/tcp
+
+*
+docker-compose scale coffee=5
+
+*
+The command will log each container that it creates. Use the docker-compose ps
+command again to see all the containers running the coffee service:
+Name Command State Ports
+----------------------------------------------------------------------------
+ch11coffeeapi_coffee_1 ./entrypoint.sh Up 0.0.0.0:32807->3000/tcp
+ch11coffeeapi_coffee_2 ./entrypoint.sh Up 0.0.0.0:32808->3000/tcp
+ch11coffeeapi_coffee_3 ./entrypoint.sh Up 0.0.0.0:32809->3000/tcp
+ch11coffeeapi_coffee_4 ./entrypoint.sh Up 0.0.0.0:32810->3000/tcp
+ch11coffeeapi_coffee_5 ./entrypoint.sh Up 0.0.0.0:32811->3000/tcp
+
+*
+docker-compose scale coffee=1 Note                      +the 1 here
+
+* LOG
+Name Command State Ports
+----------------------------------------------------------------------------
+ch11coffeeapi_coffee_1 ./entrypoint.sh Up 0.0.0.0:32807->3000/tcp
+
+///////////////////////////////////////////////////////////////////////////////
+Prelaunch builds, the environment, metadata, and networking
+
+coffee:
+build: ./coffee                    + 1 Builds from Dockerfile B located under ./coffee
+user: 777:777
+restart: always
+expose:                            |
+- 3000                             | + 4 Expose and map ports for containers
+ports:                             |
+- "0:3000"                         |
+links:
+- db:db
+environment:                       + 2 Set environment to use a database
+- COFFEEFINDER_DB_URI=postgresql://postgres:development@db:5432/po...
+- COFFEEFINDER_CONFIG=development
+- SERVICE_NAME=coffee
+labels:
+com.dockerinaction.chapter: "11"                    + 3 Label the service
+com.dockerinaction.example: "Coffee API"
+com.dockerinaction.role: "Application Logic"
+
+
+----------------------------------------------------------------------------
+Known artifacts and bind-mount volumes
+----------------------------------------------------------------------------
+
+*
+db:
+image: postgres@sha256:66ba100bc635be17...                        + Use content-addressable images for trusted Postgres version
+volumes_from:
+- dbstate                                                         + Use a data container pattern
+environment:
+- PGDATA=/var/lib/postgresql/data/pgdata
+- POSTGRES_PASSWORD=development
+labels:
+com.dockerinaction.chapter: "11"
+com.dockerinaction.example: "Coffee API"
+com.dockerinaction.role: "Database"
+
+proxy:
+image: nginx@sha256:a2b8bef333864317...                         + Use content-addressable image for trusted NGINX version
+restart: always
+volumes:
+- ./proxy/app.conf:/etc/nginx/conf.d/app.conf                   + Inject configuration via volume 
+ports:
+- "8080:8080"
+links:
+- coffee
+labels:
+com.dockerinaction.chapter: "11"
+com.dockerinaction.example: "Coffee API"
+com.dockerinaction.role: "Load Balancer"
+
+* https://docs.docker.com/compose/yml/.
+*
+
+********************************************
+Volume containers and extended services
+********************************************
+
+*
+data:
+image: gliderlabs/alpine
+command: echo Data Container
+user: 999:999
+labels:
+com.dockerinaction.chapter: "11"
+com.dockerinaction.example: "Coffee API"
+com.dockerinaction.role: "Volume Container"
+
+*
+dbstate:  
+extends:                                  + Reference to parent service in another file
+file: docker-compose.yml
+service: data
+volumes:
+- /var/lib/postgresql/data/pgdata
+
+*
+/////////////////////////////////////////////////////////////////////////////
+Clusters with Machine and Swarm
+/////////////////////////////////////////////////////////////////////////////
+
+*****************************************
+Building and managing Docker Machines
+
+*
+docker-machine help
+
+*
+docker-machine create --driver virtualbox host1
+docker-machine create --driver virtualbox host2
+docker-machine create --driver virtualbox host3
+
+*
+docker-machine ls
+
+*
+That command will display results similar to the following:
+NAME ACTIVE DRIVER STATE URL SWARM
+host1 virtualbox Running tcp://192.168.99.100:2376
+host2 virtualbox Running tcp://192.168.99.101:2376
+host3 virtualbox Running tcp://192.168.99.102:2376
+
+* specific machine or look up a specific part of its configuration,
+docker-machine inspect host1                                           + JSON document describing the machine
+docker-machine inspect --format "{{.Driver.IPAddress}}" host1          + Just the IP address
+
+*
+(http://golang.org/pkg/text/template/)
+
+*
+docker-machine ip host1
+
+*
+docker-machine upgrade host3
+
+*
+This command will result in output like the following:
+Stopping machine to do the upgrade...
+Upgrading machine host3...
+Downloading ...
+Starting machine back up...
+Starting VM...
+
+*
+docker-machine ssh host1                    + Bind your terminal to shell on host1
+touch dog.file
+exit                                        + Exit remote shell and stop command
+
+*
+docker-machine ssh host1 "echo spot > dog.file"
+
+*
+docker-machine scp host1:dog.file host2:dog.file
+docker-machine ssh host2 "cat dog.file"               + Outputs: spot
+
+*
+docker-machine stop host2
+docker-machine kill host3
+docker-machine start host2
+docker-machine rm host1 host2 host3
+
+*
+docker-machine create --driver virtualbox machine1
+docker-machine create --driver virtualbox machine2
+
+*
+docker-machine env machine1                              + Let env autodetect your shell
+docker-machine env --shell powershell machine1           + Get PowerShell configuration
+docker-machine env --shell cmd machine1                  + Get CMD configuration
+docker-machine env --shell fish machine1                 + Get fish configuration
+docker-machine env --shell bash machine1                 + Get the default (POSIX) configuration
+
+******************************************************************
+you can execute the docker-machine env command in a POSIX shell:
+******************************************************************
+
+*
+eval "$(docker-machine env machine1)"
+
+*
+docker-machine env --shell=powershell machine1 | Invoke-Expression
+
+*
+docker-machine active
+docker-machine ls
+
+*
+docker pull dockerinaction/ch12_painted
+
+*
+eval "$(docker-machine env machine2)"            + Replace with equivalent command appropriate for your shell
+docker images
+
+*
+docker run -t dockerinaction/ch12_painted \
+Tiny turtles tenderly touch tough turnips.
+
+*
+docker ps -a
+eval "$(docker-machine env machine1)"           + Replace with equivalent command appropriate for your shell
+docker ps -a
+
+*
+docker-machine rm machine1 machine2
+
+
+***************************************************************************
+Run the following commands to create a new cluster identifier:
+
+*
+docker-machine create --driver virtualbox local                  + Create a new local Docker
+eval "$(docker-machine env local)"                               + Replace with equivalent command appropriate for your shell
+
+*
+docker run --rm swarm create
+
+The last command should output a hexadecimal identifier that looks like this:
+b26688613694dbc9680cd149d389e279
+
+*
+new Swarm cluster:
+
+*
+docker-machine create \
+--driver virtualbox \
+--swarm \
+--swarm-discovery token://<TOKEN> \                           
+--swarm-master \                                    + Note this flag
+machine0-manager
+
+docker-machine create \
+--driver virtualbox \
+--swarm \
+--swarm-discovery token://<TOKEN> \
+machine1
+
+docker-machine create \
+--driver virtualbox \
+--swarm \
+--swarm-discovery token://<TOKEN> \
+machine2
+
+* the column labeled SWARM for any node in a cluster:
+NAME ...                URL                                SWARM
+machine0-manager      tcp://192.168.99.106:2376        machine0-manager (manager)
+machine1              tcp://192.168.99.107:2376        machine0-manager
+machine2              tcp://192.168.99.108:2376        machine0-manager
+
+
+***************************************************************
+POSIX-compatible shell
+
+*
+eval "$(docker-machine env --swarm machine0-manager)"
+
+If you’re using PowerShell, the run the following:
+
+*
+docker-machine env --swarm machine0-master | Invoke-Expression
+
+*
+docker info
+
+**********************************************
+That output will look similar to the following:
+Containers: 4
+Images: 3
+Role: primary
+Strategy: spread
+Filters: affinity, health, constraint, port, dependency
+Nodes: 3
+machine0-manager: 192.168.99.110:2376
+? Containers: 2
+? Reserved CPUs: 0 / 1
+? Reserved Memory: 0 B / 1.022 GiB
+? Labels: executiondriver=native-0.2, kernelversion=4.0.9-...
+machine1: 192.168.99.111:2376
+? Containers: 1
+? Reserved CPUs: 0 / 1
+? Reserved Memory: 0 B / 1.022 GiB
+? Labels: executiondriver=native-0.2, kernelversion=4.0.9-...
+machine2: 192.168.99.112:2376
+? Containers: 1
+? Reserved CPUs: 0 / 1
+? Reserved Memory: 0 B / 1.022 GiB
+? Labels: executiondriver=native-0.2, kernelversion=4.0.9-...
+CPUs: 3
+Total Memory: 3.065 GiB
+Name: 942f56b2349a
+
+*
+docker run -t -d --name hello-swarm \
+dockerinaction/ch12_painted \
+Hello Swarm
+260
+
+*
+docker logs hello-swarm
+_ _ _ _ ____
+| | | | ___| | | ___ / ___|_ ____ _ _ __ _ __ ___
+| |_| |/ _ \ | |/ _ \ \___ \ \ /\ / / _` | '__| '_ ` _ \
+| _ | __/ | | (_) | ___) \ V V / (_| | | | | | | | |
+|_| |_|\___|_|_|\___/ |____/ \_/\_/ \__,_|_| |_| |_| |_|
+
+
+*
+docker ps -a -f name=hello-swarm
+
+*
+docker info
+
+*
+Notice the number of containers and images in the cluster:
+Containers: 5
+Images: 4
+
+* * * * * * * * * * * *  *
+docker pull dockerinaction/ch12_painted
+
+*
+This command will launch a pull operation on each node:
+machine0-manager: Pulling dockerinaction/ch12_painted:latest... :
+            downloaded
+machine1: Pulling dockerinaction/ch12_painted:latest... : downloaded
+machine2: Pulling dockerinaction/ch12_painted:latest... : downloaded
+
+************************************************************************
+The Spread algorithm
+************************************************************************
+
+*
+bird:
+image: dockerinaction/ch12_painted
+command: bird
+restart: always
+
+*
+docker-compose -f flock.yml scale bird=10        + Create some birds
+docker ps                                        + Check out container distribution
+
+*
+docker-compose -f flock.yml kill
+docker-compose -f flock.yml rm –vf
+
+*
+Filters: affinity, health, constraint, port, dependency
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+example, you’d use the following command to create a new node labeled with size=small in your cluster:
+
+*
+docker-machine create -d virtualbox \
+--swarm \
+--swarm-discovery token://<YOUR TOKEN> \
+--engine-label size=small \                                  + Apply an engine label
+little-machine
+
+docker-machine create -d virtualbox \
+--swarm \
+--swarm-discovery token://<YOUR TOKEN> \
+--engine-label size=xxl \                                    + Apply an engine label
+big-machine
+
+
+*
+docker run -d -e constraint:size==xxl \                      + Constraint environment variable
+-m 4G \
+-c 512 \
+postgres
+
+*
+docker run -d -e affinity:image==nginx \                      + Affinity environment variable
+-p 80:80 \
+nginx
+
+* you could create a negated affinity:
+docker run -d -e affinity:image!=nginx \                      + Anti-affinity environment variable
+-p 8080:8080 \
+haproxy
+
+*
+docker run -d -e affinity:image==~nginx \                     + Suggested affinity environment variable
+-p 80:80 \
+nginx
+
+**************************************
+Swarm and single-host networking
+**************************************
+
+*
+git clone git@github.com:dockerinaction/ch12_coffee_api.git
+
+* Swarm cluster:
+cd ch12_coffee_api
+eval "$(docker-machine env machine0-manager)"
+
+* start
+docker-compose up -d
+
+*
+docker ps
+
+*
+docker ps | less –S                             + The less command may not be available on your system
+
+*
+curl http://$(docker-machine ip <MACHINE>):8080/api/coffeeshops/
+
+*
+{
+"coffeeshops": []
+}
+
+**************************************************************************************************************
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,177 @@
+Push upload docker
+
+docker commit 51628901d1b0 itmonitornework/test-tmages-1234:2
+
+docker push itmonitornework/test-tmages-1234:2
+
+docker login
+
+
+
+
+
+
+https://www.youtube.com/watch?v=ssqvBp9bSR8
+
+2.17
+---------------------------------------
+Info
+docker-machine ip default
+192.168.99.100
+$ docker inspect CONTAINER_ID
+  Show info
+---------------------------------------
+docker rm centos
+docker run -it centos          //access centos
+
+// 
+ yum update
+ yum install httpd -y          //install apache
+ httpd -DFOREGROUND            // Start Apache
+
+docker exec -it pensive_franklin /bin/bash          //access centos
+
+check web server
+  curl localhost                           //check web server
+exit
+
+docker exec -it Defferrent name /bin/bash          //access centos
+
+
+------------------------------------------------------
+create Images
+exit
+docker commit 201c304bfe50
+sha256:0212131ce5151efe1f315ef1e3f1e531f35e1fe    //commit already
+
+------------------------------------------------------
+Map port
+docker run -it -p 8088:80 centos-httpd
+httpd -DFOREGROUND
+
+-------------------------------------------------------
+docker pull centos
+docker run centos echo "Hello"
+docker run -it centos                 //Interactive (tty)
+docker stop centos
+docker rm centos                      //remove
+
+------------------------------------------------------
+DOCKER FILE
+docker build -t "centos-httpd".
+FROM centos
+RUN yum update -y
+RUN yum install httpd -y
+EXPOSE 8088
+
+CMD ["httpd","-DFOREGROUND"]
+
+docker rmi centos-httpd                      //delete Images
+-------------------------------------------------------
+Clone
+git cmd
+cd to file localtion first
+cd C:\Users\dong\.docker
+git clone https://github.com/osataken/docker-centos-httpd.git
+
+power shall
+cd C:\Users\dong\.docker
+docker build -t cent-httpd-2 .
+
+run
+docker run -p 8181:80 cent-httpd-2
+---------------------------------------------------------
+Clone mysql
+docker run --name mysql -e MYSQL_ROOT_PASSWORD=password -p 3306:3306 -d mysql
+
+---------------------------------------------------------
+Clone java load balance
+gie clone https://github.com/osataken?tab=repositories
+
+cd javafile
+docker build -t myrestapi .
+
+docker run -p 8080:8080 myrestapi
+--------------------------------------------------------
+Makr Images Ship product
+
+Dockerfile in intelliJ
+FROM centos
+
+run yum update -y
+RUN yum install java-1.8.0-openjdk -y
+
+ADD docker-sprintboot-restful-1.0-SNAPSHOT.jar .
+
+EXPOSE 8080
+
+CMD ["java","-jar","docker-springboot-restful-1.0-SNAPSHOT.jar"]
+
+export to target >>>IntelliJ
+---------------------------------------------------------------------
+add Hostname
+
+docker run -h host1 -p 8080:8080 myrestapi
+docker rm myrestapi
+Create Images
+docker build -t restapi .
+
+Read file
+docker inspect host1                //check info
+
+docker run -h host1 --name host1 -p 8080:8080 restapi
+----------------------------------------------------------------------
+DEMO Load Balancer HaProxy  >>rest api1,api2
+
+Create Images
+docker build -t restapi .
+
+docker run -d -h host1 --name host1 restapi
+docker run -d -h host2 --name host2 restapi
+
++++++++++++++++++++++++++++
+Creat image
+docker build -t myhaproxy .
+docker run -d --name myhaproxy -p 1936:1936 -p 80:80 myhaproxy
+
+http://192.168.99.100:1936/haproxy?stats
+haproxy
+password
+
+----------------
+Check test host
+
+curl 192.168.99.100/host
+jmeter send request
+------------------------------------------------------
+mout directory db
+
+docker run --name mysql1 -e MYSQL_ROOT_PASSWORD=1234 -p 4406:3306 -d mysql
+
+docker start mysql
+
+docker run --name mysql -e MYSQL_ROOT_PASSWORD=password -p 3306:3306 -d -v /c/Users/dong/.docker/mysql:/var/lib/mysql mysql
+
+---------------------
+Map apache with folder
+
+docker run -d --name httpd -p 80:80 -v /c/Users/dong/.docker/www:/usr/local/apache2/htdocs/ httpd
+
+-------------------------------------------------------
+Network
+docker network ls
+docker exec -it myhaproxy /bin/bash                  //alpi no binbash
+docker exec -it host1 /bin/bash
+ping host2
+
+docker images
+docker tag myhaproxy myhaproxy-2
+docker images                                 //new images
+docker tag myhaproxy myhaproxy:latest         // tag new version
+docker tag myhaproxy myhaproxy:2            // tag new version2
+
+-----------------------------------------------------
+Network Link   (Old method)
+across links
+$docker run -d --name db training/postgres
+$docker run -d -P --name web --link db:db training/webapp python app.py
